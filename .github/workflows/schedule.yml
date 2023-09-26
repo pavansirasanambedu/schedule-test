@@ -1,0 +1,90 @@
+name: Apigee X Export Management Schedule
+
+on:
+  schedule:
+    - cron: '08 00 * * *'
+
+env:
+  APIGEE_ORG: ${{ secrets.org }}
+  APIGEE_ENV: ${{ secrets.APIGEE_ENV }}
+
+jobs:
+  apigee-window-artifacts:
+    name: Apigee X Export Management Schedule
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Check out Git repository code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: "${{ secrets.TOKEN_GIT }}"
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: '${{secrets.GCP_EU_NONPROD_SERVICE_ACCOUNT_KEY_JSON}}'
+          token_format: "access_token"
+          access_token_lifetime: "300s"
+
+      - name: Apigee X Export Management Schedule
+        shell: pwsh
+        run: |
+          $env:git_token = "${{ secrets.TOKEN_GIT }}"
+          $env:key = "${{ secrets.key }}"
+          $env:org = "${{ secrets.org }}"
+          $env:TOKEN = "${{ steps.auth.outputs.access_token }}"
+          
+          $env:FieldValuestoEncrypt = "name,value"
+          $env:FIRST_LEVEL_OBJECT = "keyValueEntries"
+          $env:appfieds = $env:APP_FIELDS
+
+          Write-Host "Entered into Schedule...!"
+
+          Invoke-Pester ./scripts/apigee-artifacts-schedule.ps1 -Passthru          
+
+      - name: Remove GCP Credentials JSON File
+        run: rm gha-creds*.json
+
+      - name: Debug Git Config
+        run: |
+          git config --list
+
+      - name: Add local files to Git local branch
+        run: |
+            git config --global user.email "rajeshjanapati533@gmail.com"
+            git config --global user.name "pavansirasanambedu"
+            git add .
+
+      - name: Check for delta changes - Git
+        id: check_git_changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "Local branch is not up to date with remote_branch. Pushing latest code to Git"
+          else
+            echo "Local branch is up to date with Remote branch."
+            exit 0
+          fi
+
+      - name: Commit files to Git
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git commit -a -m "Apigee Artifacts Export Updates"
+            exit 0
+          fi
+
+      - name: Debug Git Status
+        run: |
+          git status
+
+      - name: Push changes to Git
+        run: |
+          git push origin artifacts-schedule
+
+
+
